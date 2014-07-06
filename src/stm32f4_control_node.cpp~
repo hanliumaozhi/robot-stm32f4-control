@@ -1,0 +1,138 @@
+#include <iostream>
+#include <string>
+
+#include <ros/ros.h>
+
+#include <opt_msgs/TrackArray.h>
+
+#include <SerialStream.h>
+#include <stdlib.h>
+
+struct people_data
+{
+	double x;
+	double y;
+	double z;
+};
+
+people_data laste_people;
+
+using namespace LibSerial;
+SerialStream serial_port;
+
+
+void stm32f4_cb(const opt_msgs::TrackArray::ConstPtr& msg)
+{
+	laste_people.z = 100.0;
+
+    	laste_people.x = 0.0;
+	bool is_people = false;
+	for(std::vector<opt_msgs::Track>::const_iterator it = msg->tracks.begin(); it != msg->tracks.end(); it++){
+		std::cout<<it->x<<std::endl;
+		is_people = true;
+		if (it->distance < laste_people.z){
+			laste_people.z = it->distance;
+			laste_people.x = it->x;
+			laste_people.y = it->y;
+		}
+	}
+	if (laste_people.x > 0.3){
+		serial_port.write( "b500f500$", 9) ;
+	}else if(laste_people.x < -0.3){
+        
+		serial_port.write( "f500b500$", 9) ;
+	}else{
+        if(laste_people.z > 2.8 and laste_people.z < 10.0){
+            serial_port.write( "f500f500$", 9) ;
+        }else if(laste_people.z < 2.2){
+            serial_port.write( "b500b500$", 9);
+
+        }else{
+            serial_port.write( "f000b000$", 9) ;
+        }
+    }
+	std::cout<<"~~~~~~~~~~~~~~~~~~~~~~~~~~~`"<<std::endl;
+}
+
+void init_serial(const char SERIAL_PORT_DEVICE[]);
+
+
+int main(int argc, char** argv)
+{
+	ros::init(argc, argv, "stm32f4_control");
+  	ros::NodeHandle nh("~");
+  	ros::Subscriber input_sub = nh.subscribe("/tracker/tracks", 1, stm32f4_cb);
+
+  	std::string usb_port;
+  	nh.param("dever_name", usb_port, std::string("_"));
+  	init_serial(usb_port.c_str());
+  	//serial_port.write( "f500b500$", 9) ;
+    //sleep(5);
+    //serial_port.write( "f300f300$", 9) ;
+    //sleep(5);
+    //serial_port.write( "b500f500$", 9) ;
+  	//std::cout<<usb_port<<std::endl;
+
+  	ros::spin();
+
+  	return 0;
+}
+
+void init_serial(const char SERIAL_PORT_DEVICE[])
+{
+	serial_port.Open( SERIAL_PORT_DEVICE ) ;
+    if ( ! serial_port.good() ) 
+    {
+        std::cerr << "Error: Could not open serial port " 
+                  << SERIAL_PORT_DEVICE 
+                  << std::endl ;
+        exit(1) ;
+    }
+    //
+    // Set the baud rate of the serial port.
+    //
+    serial_port.SetBaudRate( SerialStreamBuf::BAUD_9600 ) ;
+    if ( ! serial_port.good() ) 
+    {
+        std::cerr << "Error: Could not set the baud rate." << std::endl ;
+        exit(1) ;
+    }
+    //
+    // Set the number of data bits.
+    //
+    serial_port.SetCharSize( SerialStreamBuf::CHAR_SIZE_8 ) ;
+    if ( ! serial_port.good() ) 
+    {
+        std::cerr << "Error: Could not set the character size." << std::endl ;
+        exit(1) ;
+    }
+    //
+    // Disable parity.
+    //
+    serial_port.SetParity( SerialStreamBuf::PARITY_NONE ) ;
+    if ( ! serial_port.good() ) 
+    {
+        std::cerr << "Error: Could not disable the parity." << std::endl ;
+        exit(1) ;
+    }
+    //
+    // Set the number of stop bits.
+    //
+    serial_port.SetNumOfStopBits( 1 ) ;
+    if ( ! serial_port.good() ) 
+    {
+        std::cerr << "Error: Could not set the number of stop bits."
+                  << std::endl ;
+        exit(1) ;
+    }
+    //
+    // Turn on hardware flow control.
+    //
+    serial_port.SetFlowControl( SerialStreamBuf::FLOW_CONTROL_NONE ) ;
+    if ( ! serial_port.good() ) 
+    {
+        std::cerr << "Error: Could not use hardware flow control."
+                  << std::endl ;
+        exit(1) ;
+    }
+}
